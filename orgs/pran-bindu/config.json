@@ -1,0 +1,16 @@
+{
+  "slug": "pran-bindu",
+  "name": "Pran Bindu",
+  "projectId": "pran-bindu",
+  "hostingSite": "pran-bindu-2026",
+  "canary": false,
+  "firebase": {
+    "apiKey": "AIzaSyBlfE_F1N0a__BwI9uhuxb8wTLS5mk9hUo",
+    "authDomain": "pran-bindu.firebaseapp.com",
+    "projectId": "pran-bindu",
+    "storageBucket": "pran-bindu.firebasestorage.app",
+    "messagingSenderId": "240417036074",
+    "appId": "1:240417036074:web:d5ea509f2de0916cd67053",
+    "measurementId": "G-9N99G2RE35"
+  }
+}
