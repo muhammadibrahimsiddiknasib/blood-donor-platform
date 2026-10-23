@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#B4232F">
+  <title>Blood donors</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+  <header class="bar">
+    <div class="wrap">
+      <div class="brand" id="brand"></div>
+      <div class="bar-actions">
+        <select id="lang" data-i18n-label="language" aria-label="Language" hidden></select>
+        <a class="admin-link" href="/admin" data-i18n="admin">Admin</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <p class="slogan" id="slogan"></p>
+    <p class="notice" data-i18n="medical_notice">This list only helps coordination. It is not medical advice.</p>
+
+    <div class="tabs" role="tablist" data-i18n-label="inquiry" aria-label="Inquiry">
+      <button id="tab-donors" class="tab" role="tab" type="button" aria-selected="true" data-i18n="tab_donors">Donors</button>
+      <button id="tab-requests" class="tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-i18n="tab_requests">Blood requests</button>
+    </div>
+
+    <!-- Donors -->
+    <section id="view-donors" role="tabpanel" aria-labelledby="tab-donors">
+      <h1 data-i18n="find_donors">Find blood donors</h1>
+      <div class="actions">
+        <a class="btn" href="#join" data-i18n="join_donor">Join as a donor</a>
+        <a class="btn secondary" href="#gave" data-i18n="report_donation">I donated blood</a>
+      </div>
+      <form id="search" class="panel">
+        <div class="row">
+          <div><label for="s-group" data-i18n="blood_group">Blood group</label><select id="s-group"></select></div>
+          <div><label for="s-district" data-i18n="district">District / area</label><input id="s-district" type="text" autocomplete="off" maxlength="60"></div>
+        </div>
+        <div class="actions"><button class="btn" type="submit" data-i18n="search">Search</button></div>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+      <div id="error-box" class="panel" hidden role="alert">
+        <p class="error" data-i18n="error_load">Could not load data.</p>
+        <button id="retry" class="btn secondary" type="button" data-i18n="retry">Try again</button>
+      </div>
+      <div id="empty" class="panel" hidden>
+        <p data-i18n="no_results">No donors found.</p>
+        <p data-i18n="no_results_hint">Try a different blood group or area.</p>
+      </div>
+      <ul id="results" class="cards"></ul>
+      <div class="actions"><button id="more" class="btn secondary" type="button" hidden data-i18n="load_more">Load more</button></div>
+    </section>
+
+    <!-- Requests -->
+    <section id="view-requests" role="tabpanel" aria-labelledby="tab-requests" hidden>
+      <h1 data-i18n="blood_requests">Blood requests</h1>
+      <div class="actions"><a class="btn" href="#need" data-i18n="request_blood">Request blood</a></div>
+      <div id="counts" class="stats"></div>
+      <p id="req-status" role="status" aria-live="polite"></p>
+      <div id="req-error" class="panel" hidden role="alert">
+        <p class="error" data-i18n="error_load">Could not load data.</p>
+        <button id="retry-req" class="btn secondary" type="button" data-i18n="retry">Try again</button>
+      </div>
+      <div id="req-empty" class="panel" hidden><p data-i18n="no_requests">No active requests right now.</p></div>
+      <ul id="req-results" class="cards"></ul>
+      <p class="notice" data-i18n="request_list_privacy">Phone numbers and patient details are never shown here.</p>
+    </section>
+
+    <!-- Forms / confirmations are rendered here -->
+    <section id="view-form" hidden></section>
+
+    <section id="contact-text-box" class="panel">
+      <h2 data-i18n="contact">Contact</h2>
+      <p id="contact"></p>
+      <div id="contact-block"></div>
+    </section>
+    <section id="policy-box" class="panel">
+      <h2 data-i18n="policy">Our policy</h2>
+      <p id="policy"></p>
+    </section>
+  </main>
+
+  <dialog id="contact-dialog" aria-labelledby="contact-dialog-title">
+    <div id="contact-dialog-body"></div>
+    <div class="actions"><button id="contact-close" class="btn secondary" type="button" data-i18n="close">Close</button></div>
+  </dialog>
+
+  <footer class="wrap"><div id="signature"></div></footer>
+  <script type="module" src="/js/public.js"></script>
+</body>
+</html>

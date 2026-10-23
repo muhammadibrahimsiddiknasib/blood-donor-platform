@@ -1,0 +1,39 @@
+name: Deploy one organization
+description: Builds dist/<slug> from orgs/<slug>/config.json and deploys hosting + Firestore rules + indexes to that organization's own Firebase project.
+inputs:
+  slug:
+    description: Organization slug (folder name under orgs/)
+    required: true
+  key:
+    description: Deployer service-account key JSON (GitHub secret FIREBASE_DEPLOYER_KEY)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+    - run: npm ci
+      shell: bash
+    - name: Build organization folder
+      shell: bash
+      env:
+        SLUG: ${{ inputs.slug }}
+      run: node scripts/build-org.mjs "$SLUG"
+    - uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ inputs.key }}
+    - name: Deploy hosting, Firestore rules and indexes
+      shell: bash
+      env:
+        SLUG: ${{ inputs.slug }}
+      run: |
+        PROJECT_ID="$(jq -r .projectId "orgs/$SLUG/config.json")"
+        echo "Deploying '$SLUG' to Firebase project: $PROJECT_ID"
+        ./node_modules/.bin/firebase deploy --only hosting,firestore --project "$PROJECT_ID" --cwd "dist/$SLUG" --non-interactive
+        {
+          echo "### Deployed \`$SLUG\`"
+          echo "- Project: \`$PROJECT_ID\`"
+          echo "- Commit: \`$(git rev-parse HEAD)\`"
+        } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,16 @@
+{
+  "slug": "shibir-jp-sadar-south",
+  "name": "Shibir — Joypurhat Sadar South (test / canary)",
+  "projectId": "shibir-jp-sadr-south",
+  "hostingSite": "shibir-jp-sadar-south",
+  "canary": true,
+  "firebase": {
+    "apiKey": "AIzaSyDrkEyaul84yDrZu0Xcln0DE9cC2QVZdns",
+    "authDomain": "shibir-jp-sadr-south.firebaseapp.com",
+    "projectId": "shibir-jp-sadr-south",
+    "storageBucket": "shibir-jp-sadr-south.firebasestorage.app",
+    "messagingSenderId": "226011382899",
+    "appId": "1:226011382899:web:7bf482b4e129f553bad606",
+    "measurementId": "G-QZTTK3ZVQD"
+  }
+}

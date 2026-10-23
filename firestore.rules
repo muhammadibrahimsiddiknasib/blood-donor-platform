@@ -1,0 +1,263 @@
+rules_version = '2';
+
+// Default-deny. Anything not explicitly allowed below is rejected.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.role == 'admin'
+        && get(userPath(request.auth.uid)).data.active == true;
+    }
+
+    function validGroup(g) {
+      return g in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+    }
+
+    function str(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function sReq(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    // Empty string or an https:// URL (blocks javascript:, data:, http:).
+    function okUrl(v) {
+      return v is string && v.size() <= 300 && (v == '' || v.matches('^https://[^ ]+$'));
+    }
+
+    function okPhone(v) {
+      return v is string && v.matches('^[0-9+() -]{6,20}$');
+    }
+
+    function okDateOrEmpty(v) {
+      return v is string && (v == '' || v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+    }
+
+    // ------------------------------------------------ one-time first-admin bootstrap
+    // setup/state may be created exactly once (a second "create" on an existing
+    // doc is an update, which is denied). It must be written in the same batch as
+    // the caller's own users/{uid} admin document.
+    match /setup/state {
+      allow read: if true; // only reveals whether setup is complete
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['completed', 'adminUid', 'createdAt'])
+        && request.resource.data.completed == true
+        && request.resource.data.adminUid == request.auth.uid
+        && existsAfter(userPath(request.auth.uid))
+        && getAfter(userPath(request.auth.uid)).data.role == 'admin';
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------------------ admins
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // (1) First admin: only while setup/state does not yet exist AND is created
+      //     in the same batch.
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['role', 'displayName', 'active', 'createdAt'])
+        && request.resource.data.role == 'admin'
+        && request.resource.data.active == true
+        && !exists(/databases/$(database)/documents/setup/state)
+        && existsAfter(/databases/$(database)/documents/setup/state);
+
+      // (2) Later admins: only an existing active admin can add another one.
+      //     (The Auth account itself is created by the admin panel using a
+      //     secondary Firebase app instance; without this document it has no access.)
+      allow create: if isAdmin()
+        && request.auth.uid != uid
+        && request.resource.data.keys().hasOnly(['role', 'displayName', 'active', 'createdAt', 'email', 'createdBy'])
+        && request.resource.data.role == 'admin'
+        && request.resource.data.active == true
+        && request.resource.data.createdBy == request.auth.uid
+        && sReq(request.resource.data.displayName, 1, 80)
+        && sReq(request.resource.data.email, 3, 120);
+
+      // Admins may manage OTHER users but never their own role/active flags.
+      allow update, delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    // ------------------------------------------------------ organization settings
+    match /organization/public {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'organizationName', 'logoUrl', 'iconUrl', 'slogan', 'defaultLanguage',
+          'enabledLanguages', 'donationIntervalMonths', 'publicPolicy',
+          'contactInfo', 'coordinatorPhone', 'messengerUrl', 'whatsappUrl',
+          'pledgeText', 'updatedAt'
+        ])
+        && okUrl(request.resource.data.get('logoUrl', ''))
+        && okUrl(request.resource.data.get('iconUrl', ''))
+        && okUrl(request.resource.data.get('messengerUrl', ''))
+        && okUrl(request.resource.data.get('whatsappUrl', ''))
+        && str(request.resource.data.get('coordinatorPhone', ''), 30)
+        && str(request.resource.data.get('pledgeText', ''), 600);
+      allow delete: if false;
+    }
+
+    match /organization/private {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------- public donor directory (consented, minimal)
+    match /publicDonors/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'displayName', 'bloodGroup', 'district', 'districtKey',
+          'availabilityLabel', 'availableFrom', 'lastUpdated', 'consentVersion'
+        ])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 60
+        && validGroup(request.resource.data.bloodGroup)
+        && request.resource.data.availabilityLabel in ['dated', 'unavailable'];
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------ private donor data
+    match /donors/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------- donor applications (public can ONLY create, once)
+    function validDonorApp(id) {
+      let d = request.resource.data;
+      let allowed = ['ref', 'name', 'displayName', 'phone', 'bloodGroup', 'district', 'area',
+                  'lastDonationDate', 'contactPref', 'publicConsent', 'privacyConsent',
+                  'consentVersion', 'status', 'submittedAt'];
+      return id.matches('^DA-[A-Z0-9]{6}$')
+        && d.keys().hasOnly(allowed) && d.keys().hasAll(allowed)
+        && d.ref == id
+        && sReq(d.name, 2, 100)
+        && sReq(d.displayName, 1, 60)
+        && okPhone(d.phone)
+        && validGroup(d.bloodGroup)
+        && sReq(d.district, 1, 60)
+        && str(d.area, 120)
+        && okDateOrEmpty(d.lastDonationDate)
+        && d.contactPref in ['phone', 'messenger', 'whatsapp']
+        && d.publicConsent is bool
+        && d.privacyConsent == true
+        && str(d.consentVersion, 10)
+        && d.status == 'pending'
+        && d.submittedAt == request.time;
+    }
+
+    match /donorApplications/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if validDonorApp(id);
+    }
+
+    // ------------- blood requests: private record + public-safe projection (pair)
+    function validRequest(id) {
+      let d = request.resource.data;
+      let allowed = ['ref', 'contactName', 'phone', 'bloodGroup', 'units', 'district', 'hospital',
+                  'neededAt', 'urgency', 'note', 'privacyConsent', 'pledge', 'status',
+                  'source', 'createdAt'];
+      return id.matches('^BR-[A-Z0-9]{6}$')
+        && d.keys().hasOnly(allowed) && d.keys().hasAll(allowed)
+        && d.ref == id
+        && sReq(d.contactName, 2, 100)
+        && okPhone(d.phone)
+        && validGroup(d.bloodGroup)
+        && d.units is int && d.units >= 1 && d.units <= 20
+        && sReq(d.district, 1, 60)
+        && str(d.hospital, 120)
+        && str(d.neededAt, 40)
+        && d.urgency in ['normal', 'urgent', 'critical']
+        && str(d.note, 300)
+        && d.privacyConsent == true
+        && d.pledge is bool
+        && d.status == 'pending'
+        && d.source == 'public'
+        && d.createdAt == request.time;
+    }
+
+    // Shape of the public projection (applies to admins too: no private field can leak).
+    function publicRequestShape() {
+      let d = request.resource.data;
+      let allowed = ['ref', 'bloodGroup', 'units', 'district', 'neededDate', 'urgency',
+                  'publicStatus', 'createdAt'];
+      return d.keys().hasOnly(allowed) && d.keys().hasAll(allowed)
+        && validGroup(d.bloodGroup)
+        && d.units is int && d.units >= 1 && d.units <= 50
+        && sReq(d.district, 1, 60)
+        && okDateOrEmpty(d.neededDate)
+        && d.urgency in ['normal', 'urgent', 'critical']
+        && d.publicStatus in ['pending', 'coordinating', 'partial', 'fulfilled', 'closed'];
+    }
+
+    function validPublicRequest(id) {
+      let d = request.resource.data;
+      return id.matches('^BR-[A-Z0-9]{6}$')
+        && d.ref == id
+        && d.publicStatus == 'pending'
+        && d.createdAt == request.time;
+    }
+
+    match /bloodRequests/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin()
+        || (validRequest(id)
+            && existsAfter(/databases/$(database)/documents/publicBloodRequests/$(id)));
+    }
+
+    match /publicBloodRequests/{id} {
+      allow read: if true;
+      allow create: if publicRequestShape()
+        && (isAdmin()
+            || (validPublicRequest(id)
+                && existsAfter(/databases/$(database)/documents/bloodRequests/$(id))));
+      allow update: if isAdmin() && publicRequestShape();
+      allow delete: if isAdmin();
+    }
+
+    // ------------- donation self-reports (no donor login: matched by admin via phone)
+    match /donationReports/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if id.matches('^DR-[A-Z0-9]{6}$')
+        && request.resource.data.keys().hasOnly(['ref', 'reporterName', 'phone', 'donationDate',
+             'recipientType', 'recipientRef', 'notes', 'privacyConsent', 'status', 'createdAt'])
+        && request.resource.data.keys().hasAll(['ref', 'reporterName', 'phone', 'donationDate',
+             'recipientType', 'recipientRef', 'notes', 'privacyConsent', 'status', 'createdAt'])
+        && request.resource.data.ref == id
+        && sReq(request.resource.data.reporterName, 2, 100)
+        && okPhone(request.resource.data.phone)
+        && request.resource.data.donationDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.recipientType in ['person', 'hospital', 'organization', 'other']
+        && str(request.resource.data.recipientRef, 120)
+        && str(request.resource.data.notes, 300)
+        && request.resource.data.privacyConsent == true
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+    }
+
+    // Approved donation history: never hard-deleted (use reversal + reason).
+    match /donations/{id} {
+      allow read, create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Audit log: append-only for admins.
+    match /auditEvents/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

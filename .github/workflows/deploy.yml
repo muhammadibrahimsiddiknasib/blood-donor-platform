@@ -1,0 +1,140 @@
+name: CI and Deploy
+
+# One repository, many organizations (orgs/<slug>/config.json), each with its OWN Firebase project.
+#  - Every push / pull request : tests (logic, translations, org configs, Firestore rules in the emulator).
+#  - Pull request (same repo)  : preview of the canary organization on a temporary Hosting channel.
+#  - Push to main              : tests -> deploy the CANARY organization -> (approval) -> all other organizations.
+#  - Manual "Run workflow"     : choose target (all | canary | others | one slug) and optionally an older commit/tag
+#                                to ROLL BACK. If any test fails, nothing is deployed.
+# Required: secret FIREBASE_DEPLOYER_KEY (one shared deployer service account). See docs/MULTI-ORG.md.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit SHA or tag to deploy (empty = latest main). An older one = rollback.'
+        required: false
+        default: ''
+      target:
+        description: 'all | canary | others | an organization slug'
+        required: false
+        default: 'all'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Logic, translations and organization configs
+        run: npm test
+      - name: Firestore security rules tests (emulator)
+        run: npm run test:rules
+
+  preview:
+    needs: test
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build the canary organization
+        id: canary
+        run: |
+          SLUG="$(node scripts/list-orgs.mjs canary | jq -r '.[0]')"
+          node scripts/build-org.mjs "$SLUG"
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          echo "project=$(jq -r .projectId "orgs/$SLUG/config.json")" >> "$GITHUB_OUTPUT"
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_DEPLOYER_KEY }}
+          projectId: ${{ steps.canary.outputs.project }}
+          entryPoint: dist/${{ steps.canary.outputs.slug }}
+
+  plan:
+    needs: test
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      first: ${{ steps.plan.outputs.first }}
+      rest: ${{ steps.plan.outputs.rest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: plan
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+        run: node scripts/plan-deploy.mjs "${TARGET:-all}"
+
+  # Stage 1: the canary (your own test organization). Automatic.
+  deploy-canary:
+    needs: plan
+    if: needs.plan.outputs.first != '[]'
+    runs-on: ubuntu-latest
+    environment: canary
+    strategy:
+      fail-fast: true
+      matrix:
+        slug: ${{ fromJSON(needs.plan.outputs.first) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+      - uses: ./.github/actions/deploy-org
+        with:
+          slug: ${{ matrix.slug }}
+          key: ${{ secrets.FIREBASE_DEPLOYER_KEY }}
+
+  # Stage 2: every other organization, one at a time, only if stage 1 succeeded (or was not needed).
+  # Create an Environment named "production" with "Required reviewers" for a manual approval before this runs.
+  deploy-others:
+    needs: [plan, deploy-canary]
+    if: ${{ !cancelled() && needs.plan.outputs.rest != '[]' && (needs.deploy-canary.result == 'success' || needs.deploy-canary.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        slug: ${{ fromJSON(needs.plan.outputs.rest) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+      - uses: ./.github/actions/deploy-org
+        with:
+          slug: ${{ matrix.slug }}
+          key: ${{ secrets.FIREBASE_DEPLOYER_KEY }}

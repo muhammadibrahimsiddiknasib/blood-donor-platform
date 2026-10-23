@@ -1,0 +1,18 @@
+node_modules/
+.firebaserc
+.firebase/
+*.log
+*.csv
+.env
+.env.*
+!.env.example
+serviceAccount*.json
+*service-account*.json
+*credentials*.txt
+*.pem
+*.key
+# Never commit admin logins / notes with passwords
+shibir-*.txt
+*password*
+*passwd*
+dist/

@@ -1,0 +1,26 @@
+{
+  "name": "blood-donor-platform",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Lightweight, white-label blood donor coordination app for volunteer organizations (Firebase Hosting + Firestore + Auth).",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "serve": "firebase emulators:start --only hosting,firestore,auth",
+    "test": "npm run test:logic && npm run test:orgs && npm run check:i18n && npm run orgs:validate",
+    "test:logic": "node --test tests/logic.test.js",
+    "test:rules": "firebase emulators:exec --only firestore \"node --test tests/rules.test.js\"",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "deploy": "firebase deploy --only hosting,firestore",
+    "test:orgs": "node --test tests/orgs.test.js",
+    "orgs:validate": "node scripts/validate-orgs.mjs",
+    "build:org": "node scripts/build-org.mjs",
+    "add-org": "node scripts/add-org.mjs",
+    "deploy:org": "node scripts/deploy-org.mjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.14.1",
+    "firebase-tools": "^13.0.0"
+  }
+}
