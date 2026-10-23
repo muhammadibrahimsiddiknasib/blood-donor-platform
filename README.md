@@ -34,3 +34,5 @@ npm run test:rules  # Firestore rules (needs Java; GitHub Actions runs it for yo
 If spam appears, enable Firebase **App Check** (reCAPTCHA v3/Enterprise) for Firestore and add its token to the REST calls (needs a small code change).
 
 License: MIT. Original author: Ibrahim Siddik — https://ibrahim-siddik.web.app/
+=======
+# blood-donor-platform
