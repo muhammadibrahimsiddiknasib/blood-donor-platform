@@ -31,7 +31,7 @@ runs:
       run: |
         PROJECT_ID="$(jq -r .projectId "orgs/$SLUG/config.json")"
         echo "Deploying '$SLUG' to Firebase project: $PROJECT_ID"
-        ./node_modules/.bin/firebase deploy --only hosting,firestore --project "$PROJECT_ID" --cwd "dist/$SLUG" --non-interactive
+        ( cd "dist/$SLUG" && "$GITHUB_WORKSPACE/node_modules/.bin/firebase" deploy --only hosting,firestore --project "$PROJECT_ID" --non-interactive )
         {
           echo "### Deployed \`$SLUG\`"
           echo "- Project: \`$PROJECT_ID\`"
