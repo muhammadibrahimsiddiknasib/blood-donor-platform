@@ -11,9 +11,9 @@ export const consentVersion = '1';
 // <footer id="signature"> call in public/js/public.js. No lock, no tracking, no popups.
 export const developerSignature = {
   enabled: true,
-  name: 'Ibrahim Siddik',
+  name: 'IBTISAMÉ',
   portfolio: 'https://ibrahim-siddik.web.app/',
   email: 'muhammadibrahimsiddik@outlook.com',
   github: 'https://github.com/muhammadibrahimsiddiknasib',
-  showInAdmin: false,
+  showInAdmin: true,
 };
