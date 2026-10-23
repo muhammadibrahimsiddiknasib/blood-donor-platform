@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Blood Donor Platform (v0.2)
 
 A small, fast, white-label web app for volunteer blood-donor organizations: public donor list and blood-request list, donor/request/donation forms, coordinator contact, admin approval queues. Plain HTML/CSS/JS on Firebase Hosting + Firestore + Authentication. No build step.
@@ -37,4 +36,3 @@ If spam appears, enable Firebase **App Check** (reCAPTCHA v3/Enterprise) for Fir
 License: MIT. Original author: Ibrahim Siddik — https://ibrahim-siddik.web.app/
 =======
 # blood-donor-platform
->>>>>>> 096abb5f4a030693d2b1dbf7ae0e91dd3c7348d8
